@@ -1,14 +1,19 @@
 package com.example.eu_te_amo_mobile.ui
 
 import android.util.Log
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
@@ -20,18 +25,25 @@ import androidx.compose.ui.unit.sp
 import com.example.eu_te_amo_mobile.dados.LISTA_FRASES
 import com.example.eu_te_amo_mobile.dominio.FraseColocada
 import com.example.eu_te_amo_mobile.dominio.calcularLayoutDeFrases
+import kotlin.math.max
 import kotlin.random.Random
 import kotlin.system.measureTimeMillis
 
-private data class ItemDesenho(
+const val DURACAO_ANIMACAO_MS = 8000L
+
+private data class ItemDesenhoAnimado(
     val textLayoutResult: TextLayoutResult,
-    val x: Float,
-    val y: Float,
-    val cor: Color,
+    val xFinal: Float,
+    val yFinal: Float,
+    val corBase: Color,
+    val ehCentral: Boolean,
+    val instanteInicio: Float,
+    val duracaoFracao: Float,
+    val deslocamentoYPx: Float,
 )
 
 private data class CacheLayoutCoracao(
-    val itens: List<ItemDesenho>,
+    val itens: List<ItemDesenhoAnimado>,
     val totalFrases: Int,
     val tempoCalculoMs: Long,
 )
@@ -75,6 +87,20 @@ fun CoracaoCanvas(
     val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current
 
+    val progressoAnimacao = remember { Animatable(0f) }
+
+    LaunchedEffect(Unit) {
+        if (progressoAnimacao.value < 1f) {
+            progressoAnimacao.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(
+                    durationMillis = DURACAO_ANIMACAO_MS.toInt(),
+                    easing = LinearEasing,
+                ),
+            )
+        }
+    }
+
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val larguraPx = constraints.maxWidth.toFloat()
         val alturaPx = constraints.maxHeight.toFloat()
@@ -111,6 +137,14 @@ fun CoracaoCanvas(
 
                 val totalFrases = listaColocada.size
 
+                val frasesPequenas = listaColocada.filter { !it.ehCentral }
+                val yMin = frasesPequenas.minOfOrNull { it.y } ?: 0f
+                val yMax = frasesPequenas.maxOfOrNull { it.y } ?: 1f
+                val intervaloY = max(1f, yMax - yMin)
+
+                val alturaCoracaoAprox = max(1f, alturaPx * 0.88f)
+                val deslocamentoFlutuacaoPx = alturaCoracaoAprox * 0.015f
+
                 val itens = listaColocada.mapIndexed { index, fraseColocada ->
                     val fontSizeSp = (fraseColocada.tamanhoPx / density.density).sp
                     val cor = calcularCorFrase(
@@ -127,11 +161,35 @@ fun CoracaoCanvas(
                             fontSize = fontSizeSp,
                         ),
                     )
-                    ItemDesenho(
+
+                    val instanteInicio: Float
+                    val duracaoFracao: Float
+                    val deslocamentoY: Float
+
+                    if (fraseColocada.ehCentral) {
+                        instanteInicio = 0.70f
+                        duracaoFracao = 0.30f
+                        deslocamentoY = 0f
+                    } else {
+                        val progressoBaseAltura = (yMax - fraseColocada.y) / intervaloY
+                        val baseStart = progressoBaseAltura * 0.50f
+
+                        val rng = Random(semente + index)
+                        val ruido = (rng.nextFloat() - 0.5f) * 0.15f
+                        instanteInicio = (baseStart + ruido).coerceIn(0.0f, 0.50f)
+                        duracaoFracao = 0.25f
+                        deslocamentoY = deslocamentoFlutuacaoPx
+                    }
+
+                    ItemDesenhoAnimado(
                         textLayoutResult = textLayoutResult,
-                        x = fraseColocada.x,
-                        y = fraseColocada.y,
-                        cor = cor,
+                        xFinal = fraseColocada.x,
+                        yFinal = fraseColocada.y,
+                        corBase = cor,
+                        ehCentral = fraseColocada.ehCentral,
+                        instanteInicio = instanteInicio,
+                        duracaoFracao = duracaoFracao,
+                        deslocamentoYPx = deslocamentoY,
                     )
                 }
 
@@ -143,13 +201,47 @@ fun CoracaoCanvas(
         }
 
         Canvas(modifier = Modifier.fillMaxSize()) {
+            val progressoGlobal = progressoAnimacao.value
+
             drawRect(color = Color(0xFF14070C))
+
             for (item in cacheLayout.itens) {
-                drawText(
-                    textLayoutResult = item.textLayoutResult,
-                    color = item.cor,
-                    topLeft = Offset(item.x, item.y),
-                )
+                if (progressoGlobal < item.instanteInicio) continue
+
+                val progressoLocal = ((progressoGlobal - item.instanteInicio) / item.duracaoFracao).coerceIn(0f, 1f)
+                if (progressoLocal <= 0f) continue
+
+                val umMenosT = 1f - progressoLocal
+                val easeOut = 1f - (umMenosT * umMenosT * umMenosT)
+
+                if (item.ehCentral) {
+                    val escala = 0.9f + (0.1f * easeOut)
+                    val corCentral = item.corBase.copy(alpha = easeOut)
+
+                    val xCentroText = item.xFinal + (item.textLayoutResult.size.width / 2f)
+                    val yCentroText = item.yFinal + (item.textLayoutResult.size.height / 2f)
+
+                    withTransform(
+                        transformBlock = {
+                            scale(escala, escala, pivot = Offset(xCentroText, yCentroText))
+                        },
+                    ) {
+                        drawText(
+                            textLayoutResult = item.textLayoutResult,
+                            color = corCentral,
+                            topLeft = Offset(item.xFinal, item.yFinal),
+                        )
+                    }
+                } else {
+                    val yAtual = item.yFinal + (item.deslocamentoYPx * (1f - easeOut))
+                    val cor = item.corBase.copy(alpha = easeOut * item.corBase.alpha)
+
+                    drawText(
+                        textLayoutResult = item.textLayoutResult,
+                        color = cor,
+                        topLeft = Offset(item.xFinal, yAtual),
+                    )
+                }
             }
         }
     }

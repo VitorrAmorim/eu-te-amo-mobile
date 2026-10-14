@@ -5,6 +5,7 @@ import com.example.eu_te_amo_mobile.dados.LISTA_FRASES
 import com.example.eu_te_amo_mobile.dominio.CAIXA_DELIMITADORA
 import com.example.eu_te_amo_mobile.dominio.calcularLayoutDeFrases
 import com.example.eu_te_amo_mobile.dominio.estaDentroDoCoracao
+import com.example.eu_te_amo_mobile.ui.DURACAO_ANIMACAO_MS
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -25,6 +26,11 @@ class CoracaoLayoutTest {
         assertTrue(CAIXA_DELIMITADORA.maxX > 0.0)
         assertTrue(CAIXA_DELIMITADORA.minY < 0.0)
         assertTrue(CAIXA_DELIMITADORA.maxY > 0.0)
+    }
+
+    @Test
+    fun testConstantesAnimacao() {
+        assertEquals(8000L, DURACAO_ANIMACAO_MS)
     }
 
     @Test
