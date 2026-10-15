@@ -3,6 +3,7 @@ package com.example.eu_te_amo_mobile
 import com.example.eu_te_amo_mobile.dados.FRASE_CENTRAL
 import com.example.eu_te_amo_mobile.dados.LISTA_FRASES
 import com.example.eu_te_amo_mobile.dominio.CAIXA_DELIMITADORA
+import com.example.eu_te_amo_mobile.dominio.MapeadorCoracao
 import com.example.eu_te_amo_mobile.dominio.calcularLayoutDeFrases
 import com.example.eu_te_amo_mobile.dominio.estaDentroDoCoracao
 import com.example.eu_te_amo_mobile.ui.DURACAO_ANIMACAO_MS
@@ -10,6 +11,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.max
 import kotlin.system.measureTimeMillis
 
 class CoracaoLayoutTest {
@@ -34,7 +36,7 @@ class CoracaoLayoutTest {
     }
 
     @Test
-    fun testCalculoLayout() {
+    fun testMetasNovoLayout() {
         val larguraTela = 1080f
         val alturaTela = 2400f
         val densidade = 2.75f
@@ -43,7 +45,9 @@ class CoracaoLayoutTest {
             texto.length * tamanhoPx * 0.55f
         }
 
+        val mapeador = MapeadorCoracao(larguraTela, alturaTela)
         var resultado = emptyList<com.example.eu_te_amo_mobile.dominio.FraseColocada>()
+
         val tempoMs = measureTimeMillis {
             resultado = calcularLayoutDeFrases(
                 larguraTela = larguraTela,
@@ -55,20 +59,34 @@ class CoracaoLayoutTest {
             )
         }
 
+        println("Novo tempo de cálculo do layout: ${tempoMs}ms")
         println("Total de frases colocadas: ${resultado.size}")
-        println("Tempo de cálculo do layout: ${tempoMs}ms")
 
-        val fraseCentral = resultado.firstOrNull { it.ehCentral }
-        assertTrue("A frase central deve estar presente", fraseCentral != null)
-        assertEquals(FRASE_CENTRAL, fraseCentral?.texto)
+        val central = resultado.first { it.ehCentral }
+        assertEquals(FRASE_CENTRAL, central.texto)
 
-        // Verifica que todas as frases estão dentro dos limites da tela
+        // Limites
         for (frase in resultado) {
-            val larguraFrase = medirLargura(frase.texto, frase.tamanhoPx)
+            val larg = medirLargura(frase.texto, frase.tamanhoPx)
             assertTrue("X inicial dentro da tela", frase.x >= 0f)
-            assertTrue("X final dentro da tela", frase.x + larguraFrase <= larguraTela)
+            assertTrue("X final dentro da tela", frase.x + larg <= larguraTela)
             assertTrue("Y inicial dentro da tela", frase.y >= 0f)
             assertTrue("Y final dentro da tela", frase.y + frase.tamanhoPx <= alturaTela)
         }
+
+        val minSpPx = 7f * densidade
+        val t3 = max(0.034f * mapeador.larguraCoracaoPx, minSpPx)
+        val hCentral = central.tamanhoPx
+        val margemVert = t3 * 1.25f * 0.3f
+        val yMinZona = central.y - margemVert
+        val yMaxZona = central.y + hCentral + margemVert
+
+        val frasesNaZona = resultado.filter { !it.ehCentral && (it.y + it.tamanhoPx >= yMinZona && it.y <= yMaxZona) }
+        val frasesEsq = frasesNaZona.filter { it.x + medirLargura(it.texto, it.tamanhoPx) <= central.x }
+        val frasesDir = frasesNaZona.filter { it.x >= central.x + medirLargura(central.texto, central.tamanhoPx) }
+
+        println("Frases encontradas na zona central -> Esquerda: ${frasesEsq.size}, Direita: ${frasesDir.size}")
+        assertTrue("Deve haver frases na esquerda da zona central", frasesEsq.isNotEmpty())
+        assertTrue("Deve haver frases na direita da zona central", frasesDir.isNotEmpty())
     }
 }

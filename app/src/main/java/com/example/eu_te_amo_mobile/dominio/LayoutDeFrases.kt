@@ -39,38 +39,58 @@ fun calcularLayoutDeFrases(
     val mapeador = MapeadorCoracao(larguraTela, alturaTela)
     val larguraCoracaoPx = mapeador.larguraCoracaoPx
 
-    val minSpPx = 8f * densidade
+    val yTopCoracao = mapeador.matParaTelaY(mapeador.caixa.maxY)
+    val yBottomCoracao = mapeador.matParaTelaY(mapeador.caixa.minY)
+    val alturaCoracaoPx = max(1f, yBottomCoracao - yTopCoracao)
+
+    val minSpPx = 7f * densidade
     val t1 = max(0.024f * larguraCoracaoPx, minSpPx)
     val t2 = max(0.029f * larguraCoracaoPx, minSpPx)
     val t3 = max(0.034f * larguraCoracaoPx, minSpPx)
-    val tamanhosPequenosPx = listOf(t1, t2, t3)
+    val tamanhosPadrao = listOf(t3, t2, t1)
 
-    // a) FRASE CENTRAL e ZONA RESERVADA
+    val tDegrau1 = max(t1 * 0.85f, minSpPx)
+    val tDegrau2 = max(t1 * 0.70f, minSpPx)
+    val todosTamanhosPossiveis = listOf(t3, t2, t1, tDegrau1, tDegrau2).distinct().sortedDescending()
+
+    val y40 = yTopCoracao + (0.40f * alturaCoracaoPx)
+    val y60 = yTopCoracao + (0.60f * alturaCoracaoPx)
+
+    var melhorYCentral = yTopCoracao + (0.50f * alturaCoracaoPx)
+    var maiorLarguraCentralDisponivel = -1f
+
+    var yScan = y40
+    while (yScan <= y60) {
+        var xEsq = mapeador.centroTelaX
+        while ((xEsq > 0f) && mapeador.pontoTelaEstaDentro(xEsq, yScan)) xEsq -= 1f
+        var xDir = mapeador.centroTelaX
+        while ((xDir < larguraTela) && mapeador.pontoTelaEstaDentro(xDir, yScan)) xDir += 1f
+        val larg = max(0f, xDir - xEsq)
+        if (larg > maiorLarguraCentralDisponivel) {
+            maiorLarguraCentralDisponivel = larg
+            melhorYCentral = yScan
+        }
+        yScan += 2f
+    }
+
     val centroX = mapeador.centroTelaX
-    val centroY = mapeador.centroTelaY
+    val centroY = melhorYCentral
+    val larguraNaAlturaCentral = maiorLarguraCentralDisponivel
 
-    // Calcula largura do coração na altura do centro
-    var xEsquerdaCentral = centroX
-    while ((xEsquerdaCentral > 0f) && mapeador.pontoTelaEstaDentro(xEsquerdaCentral, centroY)) {
-        xEsquerdaCentral -= 1f
-    }
-    var xDireitaCentral = centroX
-    while ((xDireitaCentral < larguraTela) && mapeador.pontoTelaEstaDentro(xDireitaCentral, centroY)) {
-        xDireitaCentral += 1f
-    }
-    val larguraNaAlturaCentral = max(1f, xDireitaCentral - xEsquerdaCentral)
+    val larguraMaxCentral = 0.42f * larguraNaAlturaCentral
+    val tamanhoMinCentral = 2.5f * t3
 
-    var tamanhoCentralPx = 0.55f * larguraNaAlturaCentral
+    var tamanhoCentralPx = larguraMaxCentral
     var wCentral: Float
     var hCentral: Float
 
-    while (tamanhoCentralPx > 2.5f * t3) {
+    while (tamanhoCentralPx > tamanhoMinCentral) {
         wCentral = medirLargura(FRASE_CENTRAL, tamanhoCentralPx)
         hCentral = tamanhoCentralPx
-        val xCentralTmp = centroX - wCentral / 2f
-        val yCentralTmp = centroY - hCentral / 2f
+        val xCentralTmp = centroX - (wCentral / 2f)
+        val yCentralTmp = centroY - (hCentral / 2f)
 
-        if (wCentral <= 0.55f * larguraNaAlturaCentral &&
+        if ((wCentral <= larguraMaxCentral) &&
             mapeador.pontoTelaEstaDentro(xCentralTmp, yCentralTmp) &&
             mapeador.pontoTelaEstaDentro(xCentralTmp + wCentral, yCentralTmp) &&
             mapeador.pontoTelaEstaDentro(xCentralTmp, yCentralTmp + hCentral) &&
@@ -80,12 +100,12 @@ fun calcularLayoutDeFrases(
         }
         tamanhoCentralPx -= 1f
     }
-    tamanhoCentralPx = max(tamanhoCentralPx, 2.5f * t3)
+    tamanhoCentralPx = max(tamanhoCentralPx, tamanhoMinCentral)
     wCentral = medirLargura(FRASE_CENTRAL, tamanhoCentralPx)
     hCentral = tamanhoCentralPx
 
-    val xCentral = centroX - wCentral / 2f
-    val yCentral = centroY - hCentral / 2f
+    val xCentral = centroX - (wCentral / 2f)
+    val yCentral = centroY - (hCentral / 2f)
 
     resultado.add(
         FraseColocada(
@@ -98,17 +118,19 @@ fun calcularLayoutDeFrases(
         ),
     )
 
-    val margemZona = hCentral * 0.15f
+    val margemHoriz = t3 * 1.0f
+    val alturaLinha = t3 * 1.25f
+    val margemVert = alturaLinha * 0.3f
+
     val zonaReservada = Retangulo(
-        xMin = xCentral - margemZona,
-        yMin = yCentral - margemZona,
-        xMax = xCentral + wCentral + margemZona,
-        yMax = yCentral + hCentral + margemZona,
+        xMin = xCentral - margemHoriz,
+        yMin = yCentral - margemVert,
+        xMax = xCentral + wCentral + margemHoriz,
+        yMax = yCentral + hCentral + margemVert,
     )
 
-    val alturaLinha = t3 * 1.25f
-    val yInicio = mapeador.matParaTelaY(mapeador.caixa.maxY)
-    val yFim = mapeador.matParaTelaY(mapeador.caixa.minY)
+    val yInicio = yTopCoracao
+    val yFim = yBottomCoracao
 
     val rng = Random(semente)
     var ultimaFraseColocada: Frase? = null
@@ -127,20 +149,10 @@ fun calcularLayoutDeFrases(
 
     var baralhoAtual = criarBaralho()
 
-    fun espiarProximaFrase(): Frase {
+    fun renovarBaralhoSeNecessario() {
         if (baralhoAtual.isEmpty()) {
             baralhoAtual = criarBaralho()
         }
-        return baralhoAtual.first()
-    }
-
-    fun consumirProximaFrase(): Frase {
-        if (baralhoAtual.isEmpty()) {
-            baralhoAtual = criarBaralho()
-        }
-        val f = baralhoAtual.removeAt(0)
-        ultimaFraseColocada = f
-        return f
     }
 
     val margemInterna = larguraCoracaoPx * 0.015f
@@ -207,21 +219,52 @@ fun calcularLayoutDeFrases(
             val xFimT = trecho.second
             val larguraDisponivel = xFimT - xInicioT
 
-            val candidatos = mutableListOf<Triple<Frase, Float, Float>>()
+            val candidatos = mutableListOf<Triple<Frase, Float, Float>>() // (Frase, tamanhoPx, larguraMedida)
             var somaLarguras = 0f
 
             while (true) {
-                val fraseCand = espiarProximaFrase()
-                val tamPxCand = tamanhosPequenosPx[rng.nextInt(tamanhosPequenosPx.size)]
-                val largCand = medirLargura(fraseCand.texto, tamPxCand)
-
+                renovarBaralhoSeNecessario()
                 val espacoMinimo = 4f * densidade
-                val espacoNecessario = if (candidatos.isEmpty()) largCand else somaLarguras + largCand + espacoMinimo
+                val espacoLivre = if (candidatos.isEmpty()) larguraDisponivel else larguraDisponivel - somaLarguras - (candidatos.size * espacoMinimo)
 
-                if (espacoNecessario <= larguraDisponivel) {
-                    consumirProximaFrase()
-                    candidatos.add(Triple(fraseCand, tamPxCand, largCand))
-                    somaLarguras += largCand
+                if (espacoLivre <= 0f) break
+
+                var melhorEscolha: Triple<Frase, Float, Float>? = null
+                var indiceMelhorFrase = -1
+
+                for ((idx, frase) in baralhoAtual.withIndex()) {
+                    for (tam in tamanhosPadrao) {
+                        val larg = medirLargura(frase.texto, tam)
+                        if (larg <= espacoLivre) {
+                            if (melhorEscolha == null || larg > melhorEscolha.third) {
+                                melhorEscolha = Triple(frase, tam, larg)
+                                indiceMelhorFrase = idx
+                            }
+                        }
+                    }
+                    if (melhorEscolha != null) break
+                }
+
+                if (melhorEscolha == null) {
+                    for ((idx, frase) in baralhoAtual.withIndex()) {
+                        for (tam in todosTamanhosPossiveis) {
+                            val larg = medirLargura(frase.texto, tam)
+                            if (larg <= espacoLivre) {
+                                if (melhorEscolha == null || larg > melhorEscolha.third) {
+                                    melhorEscolha = Triple(frase, tam, larg)
+                                    indiceMelhorFrase = idx
+                                }
+                            }
+                        }
+                        if (melhorEscolha != null) break
+                    }
+                }
+
+                if (melhorEscolha != null && indiceMelhorFrase >= 0) {
+                    val fraseEscolhida = baralhoAtual.removeAt(indiceMelhorFrase)
+                    ultimaFraseColocada = fraseEscolhida
+                    candidatos.add(melhorEscolha)
+                    somaLarguras += melhorEscolha.third
                 } else {
                     break
                 }
@@ -231,12 +274,12 @@ fun calcularLayoutDeFrases(
                 if (candidatos.size == 1) {
                     val cand = candidatos[0]
                     val sobra = larguraDisponivel - cand.third
-                    val xPos = xInicioT + sobra / 2f
-                    val yPos = yTop + (alturaLinha - cand.second) / 2f
+                    val xPos = xInicioT + (sobra / 2f)
+                    val yPos = yTop + ((alturaLinha - cand.second) / 2f)
 
-                    val centroFraseX = xPos + cand.third / 2f
-                    val centroFraseY = yPos + cand.second / 2f
-                    val dist = sqrt((centroFraseX - centroX) * (centroFraseX - centroX) + (centroFraseY - centroY) * (centroFraseY - centroY))
+                    val centroFraseX = xPos + (cand.third / 2f)
+                    val centroFraseY = yPos + (cand.second / 2f)
+                    val dist = sqrt(((centroFraseX - centroX) * (centroFraseX - centroX)) + ((centroFraseY - centroY) * (centroFraseY - centroY)))
                     val distNorm = (dist / dMax).coerceIn(0f, 1f)
 
                     resultado.add(
@@ -255,10 +298,10 @@ fun calcularLayoutDeFrases(
                     var xAtual = xInicioT
 
                     for (cand in candidatos) {
-                        val yPos = yTop + (alturaLinha - cand.second) / 2f
-                        val centroFraseX = xAtual + cand.third / 2f
-                        val centroFraseY = yPos + cand.second / 2f
-                        val dist = sqrt((centroFraseX - centroX) * (centroFraseX - centroX) + (centroFraseY - centroY) * (centroFraseY - centroY))
+                        val yPos = yTop + ((alturaLinha - cand.second) / 2f)
+                        val centroFraseX = xAtual + (cand.third / 2f)
+                        val centroFraseY = yPos + ((cand.second) / 2f)
+                        val dist = sqrt(((centroFraseX - centroX) * (centroFraseX - centroX)) + ((centroFraseY - centroY) * (centroFraseY - centroY)))
                         val distNorm = (dist / dMax).coerceIn(0f, 1f)
 
                         resultado.add(
