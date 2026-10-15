@@ -20,7 +20,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -41,6 +43,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.example.eu_te_amo_mobile.R
 import com.example.eu_te_amo_mobile.dados.LISTA_FRASES
 import com.example.eu_te_amo_mobile.dominio.FraseColocada
+import com.example.eu_te_amo_mobile.dominio.MapeadorCoracao
 import com.example.eu_te_amo_mobile.dominio.calcularLayoutDeFrases
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -51,6 +54,15 @@ import kotlin.random.Random
 import kotlin.system.measureTimeMillis
 
 const val DURACAO_ANIMACAO_MS = 8000L
+const val PARTICULAS_ATIVAS = true
+
+private data class ParticulaLuz(
+    val relX: Float,
+    val relYInicial: Float,
+    val raioDp: Float,
+    val velocidade: Float,
+    val opacidadeMax: Float,
+)
 
 private data class ItemDesenhoAnimado(
     val textLayoutResult: TextLayoutResult,
@@ -65,39 +77,45 @@ private data class ItemDesenhoAnimado(
 
 private data class CacheLayoutCoracao(
     val itens: List<ItemDesenhoAnimado>,
+    val particulas: List<ParticulaLuz>,
     val totalFrases: Int,
     val frasesPequenasCount: Int,
+    val centroX: Float,
+    val centroY: Float,
+    val larguraCoracaoPx: Float,
     val tempoCalculoMs: Long,
 )
 
-private fun lerpColor(c1: Color, c2: Color, t: Float): Color {
-    val r = c1.red + ((c2.red - c1.red) * t)
-    val g = c1.green + ((c2.green - c1.green) * t)
-    val b = c1.blue + ((c2.blue - c1.blue) * t)
-    return Color(r, g, b, 1f)
-}
-
-private fun calcularCorFrase(
+private fun calcularCorEProfundidadeFrase(
     distanciaDoCentro: Float,
     ehCentral: Boolean,
+    tamanhoPx: Float,
+    tMinPx: Float,
+    tMaxPx: Float,
     indice: Int,
     semente: Long = 42L,
 ): Color {
     if (ehCentral) return Color(0xFFFFF1F3)
 
-    val corCentro = Color(0xFF8E1B3A)
-    val corContorno = Color(0xFFFF4D6D)
-    val corBase = lerpColor(corCentro, corContorno, distanciaDoCentro.coerceIn(0f, 1f))
-
     val rng = Random(semente + indice)
-    val fatorBrilho = 0.90f + (rng.nextFloat() * 0.20f)
+    val eChampagne = rng.nextFloat() < 0.08f
 
-    return Color(
-        red = (corBase.red * fatorBrilho).coerceIn(0f, 1f),
-        green = (corBase.green * fatorBrilho).coerceIn(0f, 1f),
-        blue = (corBase.blue * fatorBrilho).coerceIn(0f, 1f),
-        alpha = 1f,
-    )
+    val corTom = if (eChampagne) {
+        Color(0xFFF3D9B1)
+    } else {
+        val tonsRose = listOf(Color(0xFFFF6B81), Color(0xFFFF8FA3), Color(0xFFFFB3C1))
+        tonsRose[rng.nextInt(tonsRose.size)]
+    }
+
+    val fTamanho = if (tMaxPx > tMinPx) ((tamanhoPx - tMinPx) / (tMaxPx - tMinPx)).coerceIn(0f, 1f) else 0.5f
+    var opacidadeBase = 0.55f + (0.40f * fTamanho)
+
+    if (distanciaDoCentro > 0.85f) {
+        opacidadeBase += 0.10f
+    }
+
+    val opacidadeFinal = opacidadeBase.coerceIn(0f, 1f)
+    return corTom.copy(alpha = opacidadeFinal)
 }
 
 @Composable
@@ -187,7 +205,7 @@ fun CoracaoCanvas(
 
         val cacheLayout = remember(larguraPx, alturaPx, density.density) {
             if ((larguraPx <= 0f) || (alturaPx <= 0f)) {
-                CacheLayoutCoracao(emptyList(), 0, 0, 0L)
+                CacheLayoutCoracao(emptyList(), emptyList(), 0, 0, 0f, 0f, 0f, 0L)
             } else {
                 var listaColocada: List<FraseColocada> = emptyList()
 
@@ -197,7 +215,7 @@ fun CoracaoCanvas(
                         text = texto,
                         style = TextStyle(
                             fontFamily = FontFamily.Default,
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.Medium,
                             fontSize = fontSizeSp,
                         ),
                     )
@@ -243,9 +261,21 @@ fun CoracaoCanvas(
                     )
                 }
 
+                val mapeador = MapeadorCoracao(larguraPx, alturaPx)
+                val centroX = mapeador.centroTelaX
+                val centroY = mapeador.centroTelaY
+                val larguraCoracaoPx = mapeador.larguraCoracaoPx
+
                 val totalFrases = listaColocada.size
                 val frasesPequenas = listaColocada.filter { !it.ehCentral }
                 val frasesPequenasCount = frasesPequenas.size
+
+                val minSpPx = 7f * density.density
+                val t1 = max(0.024f * larguraCoracaoPx, minSpPx)
+                val t2 = max(0.029f * larguraCoracaoPx, minSpPx)
+                val t3 = max(0.034f * larguraCoracaoPx, minSpPx)
+                val tMinPx = minOf(t1, t2, t3)
+                val tMaxPx = maxOf(t1, t2, t3)
 
                 val yMin = frasesPequenas.minOfOrNull { it.y } ?: 0f
                 val yMax = frasesPequenas.maxOfOrNull { it.y } ?: 1f
@@ -256,23 +286,35 @@ fun CoracaoCanvas(
 
                 val itens = listaColocada.mapIndexed { index, fraseColocada ->
                     val fontSizeSp = (fraseColocada.tamanhoPx / density.density).sp
-                    val cor = calcularCorFrase(
+                    val cor = calcularCorEProfundidadeFrase(
                         distanciaDoCentro = fraseColocada.distanciaDoCentro,
                         ehCentral = fraseColocada.ehCentral,
+                        tamanhoPx = fraseColocada.tamanhoPx,
+                        tMinPx = tMinPx,
+                        tMaxPx = tMaxPx,
                         indice = index,
                         semente = semente,
                     )
 
                     val textStyle = if (fraseColocada.ehCentral) {
+                        val shadowGlow = Shadow(
+                            color = Color(0xFFFF4D6D),
+                            offset = Offset.Zero,
+                            blurRadius = fontSizeSp.value * density.density * 0.35f,
+                        )
                         TextStyle(
                             fontFamily = FonteCentralFamily,
                             fontWeight = FontWeight.Normal,
                             fontSize = fontSizeSp,
+                            brush = Brush.verticalGradient(
+                                colors = listOf(Color(0xFFFFF6F0), Color(0xFFFFC2D1)),
+                            ),
+                            shadow = shadowGlow,
                         )
                     } else {
                         TextStyle(
                             fontFamily = FontFamily.Default,
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.Medium,
                             fontSize = fontSizeSp,
                         )
                     }
@@ -313,10 +355,30 @@ fun CoracaoCanvas(
                     )
                 }
 
+                val rngPart = Random(42L)
+                val particulas = List(18) {
+                    ParticulaLuz(
+                        relX = rngPart.nextFloat(),
+                        relYInicial = rngPart.nextFloat(),
+                        raioDp = 6f + (rngPart.nextFloat() * 16f),
+                        velocidade = 1f / (25000f + (rngPart.nextFloat() * 15000f)),
+                        opacidadeMax = 0.04f + (rngPart.nextFloat() * 0.08f),
+                    )
+                }
+
                 Log.d("CoracaoCanvas", "Total frases colocadas: $totalFrases, tempo: ${tempoMs}ms")
                 onLayoutCalculado?.invoke(totalFrases, tempoMs)
 
-                CacheLayoutCoracao(itens, totalFrases, frasesPequenasCount, tempoMs)
+                CacheLayoutCoracao(
+                    itens = itens,
+                    particulas = particulas,
+                    totalFrases = totalFrases,
+                    frasesPequenasCount = frasesPequenasCount,
+                    centroX = centroX,
+                    centroY = centroY,
+                    larguraCoracaoPx = larguraCoracaoPx,
+                    tempoCalculoMs = tempoMs,
+                )
             }
         }
 
@@ -336,7 +398,56 @@ fun CoracaoCanvas(
             val tPosAnimMs = tempoPosAnimacaoMs.longValue
             val posAnimacaoAtiva = animacoesAtivas && (progressoGlobal >= 1f)
 
-            drawRect(color = Color(0xFF14070C))
+            val centroX = cacheLayout.centroX
+            val centroY = cacheLayout.centroY
+
+            val raioFundo = max(larguraPx, alturaPx) * 0.85f
+            drawRect(
+                brush = Brush.radialGradient(
+                    colors = listOf(Color(0xFF3A1030), Color(0xFF12060F)),
+                    center = Offset(centroX, centroY),
+                    radius = raioFundo,
+                ),
+            )
+
+            val raioGlowCoracao = max(1f, cacheLayout.larguraCoracaoPx * 0.60f)
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color(0xFFFF4D6D).copy(alpha = 0.16f),
+                        Color(0xFFFF4D6D).copy(alpha = 0f),
+                    ),
+                    center = Offset(centroX, centroY),
+                    radius = raioGlowCoracao,
+                ),
+                center = Offset(centroX, centroY),
+                radius = raioGlowCoracao,
+            )
+
+            if (PARTICULAS_ATIVAS && animacoesAtivas) {
+                for (p in cacheLayout.particulas) {
+                    val deslocamentoYRel = (tPosAnimMs.toFloat() * p.velocidade) % 1f
+                    var relY = p.relYInicial - deslocamentoYRel
+                    if (relY < 0f) relY += 1f
+
+                    val xPx = p.relX * larguraPx
+                    val yPx = relY * alturaPx
+                    val raioPx = p.raioDp * density.density
+
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                Color(0xFFFF4D6D).copy(alpha = p.opacidadeMax),
+                                Color(0xFFFF4D6D).copy(alpha = 0f),
+                            ),
+                            center = Offset(xPx, yPx),
+                            radius = raioPx,
+                        ),
+                        center = Offset(xPx, yPx),
+                        radius = raioPx,
+                    )
+                }
+            }
 
             val opacidadeHalo: Float
             val margemHaloPx: Float
@@ -353,7 +464,7 @@ fun CoracaoCanvas(
             val totalFrasesPequenas = cacheLayout.frasesPequenasCount
             val indiceFraseBrilho: Int
             val intensidadeBrilho: Float
-            if (posAnimacaoAtiva && totalFrasesPequenas > 0) {
+            if (posAnimacaoAtiva && (totalFrasesPequenas > 0)) {
                 val cicloBrilho = tPosAnimMs / 400L
                 val tCiclo = (tPosAnimMs % 400L).toFloat() / 400f
                 intensidadeBrilho = sin(tCiclo * PI.toFloat())
@@ -376,12 +487,12 @@ fun CoracaoCanvas(
 
                 if (item.ehCentral) {
                     val escala = 0.9f + (0.1f * easeOut)
-                    val corCentral = item.corBase.copy(alpha = easeOut)
+                    val corCentralAlpha = Color.White.copy(alpha = easeOut)
 
                     val xCentroText = item.xFinal + (item.textLayoutResult.size.width / 2f)
                     val yCentroText = item.yFinal + (item.textLayoutResult.size.height / 2f)
 
-                    if (posAnimacaoAtiva && opacidadeHalo > 0f) {
+                    if (posAnimacaoAtiva && (opacidadeHalo > 0f)) {
                         val xHalo = item.xFinal - margemHaloPx
                         val yHalo = item.yFinal - margemHaloPx
                         val wHalo = item.textLayoutResult.size.width + (2f * margemHaloPx)
@@ -402,7 +513,7 @@ fun CoracaoCanvas(
                     ) {
                         drawText(
                             textLayoutResult = item.textLayoutResult,
-                            color = corCentral,
+                            color = corCentralAlpha,
                             topLeft = Offset(item.xFinal, item.yFinal),
                         )
                     }
