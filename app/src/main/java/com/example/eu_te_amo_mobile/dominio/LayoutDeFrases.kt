@@ -27,7 +27,9 @@ fun calcularLayoutDeFrases(
     larguraTela: Float,
     alturaTela: Float,
     listaFrases: List<Frase>,
-    medirLargura: (texto: String, tamanhoPx: Float) -> Float,
+    medirLarguraComum: (texto: String, tamanhoPx: Float) -> Float,
+    medirLarguraCentral: (texto: String, tamanhoPx: Float) -> Float,
+    medirAlturaCentral: (texto: String, tamanhoPx: Float) -> Float = { _, tamPx -> tamPx * 1.25f },
     semente: Long = 42L,
     densidade: Float = 1f,
 ): List<FraseColocada> {
@@ -85,8 +87,8 @@ fun calcularLayoutDeFrases(
     var hCentral: Float
 
     while (tamanhoCentralPx > tamanhoMinCentral) {
-        wCentral = medirLargura(FRASE_CENTRAL, tamanhoCentralPx)
-        hCentral = tamanhoCentralPx
+        wCentral = medirLarguraCentral(FRASE_CENTRAL, tamanhoCentralPx)
+        hCentral = medirAlturaCentral(FRASE_CENTRAL, tamanhoCentralPx)
         val xCentralTmp = centroX - (wCentral / 2f)
         val yCentralTmp = centroY - (hCentral / 2f)
 
@@ -101,8 +103,8 @@ fun calcularLayoutDeFrases(
         tamanhoCentralPx -= 1f
     }
     tamanhoCentralPx = max(tamanhoCentralPx, tamanhoMinCentral)
-    wCentral = medirLargura(FRASE_CENTRAL, tamanhoCentralPx)
-    hCentral = tamanhoCentralPx
+    wCentral = medirLarguraCentral(FRASE_CENTRAL, tamanhoCentralPx)
+    hCentral = medirAlturaCentral(FRASE_CENTRAL, tamanhoCentralPx)
 
     val xCentral = centroX - (wCentral / 2f)
     val yCentral = centroY - (hCentral / 2f)
@@ -118,9 +120,9 @@ fun calcularLayoutDeFrases(
         ),
     )
 
-    val margemHoriz = t3 * 1.0f
+    val margemHoriz = max(t3 * 1.2f, hCentral * 0.18f)
+    val margemVert = max(t3 * 0.4f, hCentral * 0.20f)
     val alturaLinha = t3 * 1.25f
-    val margemVert = alturaLinha * 0.3f
 
     val zonaReservada = Retangulo(
         xMin = xCentral - margemHoriz,
@@ -129,16 +131,13 @@ fun calcularLayoutDeFrases(
         yMax = yCentral + hCentral + margemVert,
     )
 
-    val yInicio = yTopCoracao
-    val yFim = yBottomCoracao
-
     val rng = Random(semente)
     var ultimaFraseColocada: Frase? = null
 
     fun criarBaralho(): MutableList<Frase> {
         val embaralhado = listaFrases.shuffled(rng).toMutableList()
-        if (ultimaFraseColocada != null && embaralhado.isNotEmpty() &&
-            embaralhado.first() == ultimaFraseColocada && embaralhado.size > 1
+        if ((ultimaFraseColocada != null) && embaralhado.isNotEmpty() &&
+            (embaralhado.first() == ultimaFraseColocada) && (embaralhado.size > 1)
         ) {
             val temp = embaralhado[0]
             embaralhado[0] = embaralhado[1]
@@ -158,8 +157,8 @@ fun calcularLayoutDeFrases(
     val margemInterna = larguraCoracaoPx * 0.015f
     val dMax = max(mapeador.larguraCoracaoPx, mapeador.alturaCoracaoPx) / 2f
 
-    var yLinha = yInicio
-    while (yLinha <= yFim - alturaLinha) {
+    var yLinha = yTopCoracao
+    while (yLinha <= (yBottomCoracao - alturaLinha)) {
         val yTop = yLinha
         val yBottom = yLinha + alturaLinha
 
@@ -193,7 +192,7 @@ fun calcularLayoutDeFrases(
         }
 
         val trechosFinais = mutableListOf<Pair<Float, Float>>()
-        val linhaCruzaZonaVert = yBottom >= zonaReservada.yMin && yTop <= zonaReservada.yMax
+        val linhaCruzaZonaVert = (yBottom >= zonaReservada.yMin) && (yTop <= zonaReservada.yMax)
 
         for (trecho in trechosLinha) {
             if (linhaCruzaZonaVert) {
@@ -234,7 +233,7 @@ fun calcularLayoutDeFrases(
 
                 for ((idx, frase) in baralhoAtual.withIndex()) {
                     for (tam in tamanhosPadrao) {
-                        val larg = medirLargura(frase.texto, tam)
+                        val larg = medirLarguraComum(frase.texto, tam)
                         if (larg <= espacoLivre) {
                             if (melhorEscolha == null || larg > melhorEscolha.third) {
                                 melhorEscolha = Triple(frase, tam, larg)
@@ -248,7 +247,7 @@ fun calcularLayoutDeFrases(
                 if (melhorEscolha == null) {
                     for ((idx, frase) in baralhoAtual.withIndex()) {
                         for (tam in todosTamanhosPossiveis) {
-                            val larg = medirLargura(frase.texto, tam)
+                            val larg = medirLarguraComum(frase.texto, tam)
                             if (larg <= espacoLivre) {
                                 if (melhorEscolha == null || larg > melhorEscolha.third) {
                                     melhorEscolha = Triple(frase, tam, larg)

@@ -36,13 +36,21 @@ class CoracaoLayoutTest {
     }
 
     @Test
-    fun testMetasNovoLayout() {
+    fun testMetasNovoLayoutComFonteManuscrita() {
         val larguraTela = 1080f
         val alturaTela = 2400f
         val densidade = 2.75f
 
-        val medirLargura: (String, Float) -> Float = { texto, tamanhoPx ->
+        val medirLarguraComum: (String, Float) -> Float = { texto, tamanhoPx ->
             texto.length * tamanhoPx * 0.55f
+        }
+
+        val medirLarguraCentral: (String, Float) -> Float = { texto, tamanhoPx ->
+            texto.length * tamanhoPx * 0.62f
+        }
+
+        val medirAlturaCentral: (String, Float) -> Float = { _, tamanhoPx ->
+            tamanhoPx * 1.35f
         }
 
         val mapeador = MapeadorCoracao(larguraTela, alturaTela)
@@ -53,21 +61,23 @@ class CoracaoLayoutTest {
                 larguraTela = larguraTela,
                 alturaTela = alturaTela,
                 listaFrases = LISTA_FRASES,
-                medirLargura = medirLargura,
+                medirLarguraComum = medirLarguraComum,
+                medirLarguraCentral = medirLarguraCentral,
+                medirAlturaCentral = medirAlturaCentral,
                 semente = 42L,
                 densidade = densidade,
             )
         }
 
-        println("Novo tempo de cálculo do layout: ${tempoMs}ms")
+        println("Novo tempo de cálculo do layout (com fonte manuscrita): ${tempoMs}ms")
         println("Total de frases colocadas: ${resultado.size}")
 
         val central = resultado.first { it.ehCentral }
         assertEquals(FRASE_CENTRAL, central.texto)
 
-        // Limites
+        // Limites da tela
         for (frase in resultado) {
-            val larg = medirLargura(frase.texto, frase.tamanhoPx)
+            val larg = if (frase.ehCentral) medirLarguraCentral(frase.texto, frase.tamanhoPx) else medirLarguraComum(frase.texto, frase.tamanhoPx)
             assertTrue("X inicial dentro da tela", frase.x >= 0f)
             assertTrue("X final dentro da tela", frase.x + larg <= larguraTela)
             assertTrue("Y inicial dentro da tela", frase.y >= 0f)
@@ -76,14 +86,14 @@ class CoracaoLayoutTest {
 
         val minSpPx = 7f * densidade
         val t3 = max(0.034f * mapeador.larguraCoracaoPx, minSpPx)
-        val hCentral = central.tamanhoPx
-        val margemVert = t3 * 1.25f * 0.3f
+        val hCentral = medirAlturaCentral(central.texto, central.tamanhoPx)
+        val margemVert = max(t3 * 0.4f, hCentral * 0.20f)
         val yMinZona = central.y - margemVert
         val yMaxZona = central.y + hCentral + margemVert
 
         val frasesNaZona = resultado.filter { !it.ehCentral && (it.y + it.tamanhoPx >= yMinZona && it.y <= yMaxZona) }
-        val frasesEsq = frasesNaZona.filter { it.x + medirLargura(it.texto, it.tamanhoPx) <= central.x }
-        val frasesDir = frasesNaZona.filter { it.x >= central.x + medirLargura(central.texto, central.tamanhoPx) }
+        val frasesEsq = frasesNaZona.filter { it.x + medirLarguraComum(it.texto, it.tamanhoPx) <= central.x }
+        val frasesDir = frasesNaZona.filter { it.x >= central.x + medirLarguraCentral(central.texto, central.tamanhoPx) }
 
         println("Frases encontradas na zona central -> Esquerda: ${frasesEsq.size}, Direita: ${frasesDir.size}")
         assertTrue("Deve haver frases na esquerda da zona central", frasesEsq.isNotEmpty())

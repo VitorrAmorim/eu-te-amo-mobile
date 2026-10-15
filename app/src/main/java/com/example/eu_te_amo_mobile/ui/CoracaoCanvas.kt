@@ -130,7 +130,7 @@ fun CoracaoCanvas(
     val tempoPosAnimacaoMs = remember { mutableLongStateOf(0L) }
 
     val reiniciarAnimacao: () -> Unit = {
-        if (animacoesAtivas && progressoAnimacao.value >= 1f) {
+        if (animacoesAtivas && (progressoAnimacao.value >= 1f)) {
             scope.launch {
                 progressoAnimacao.snapTo(0f)
                 progressoAnimacao.animateTo(
@@ -191,7 +191,7 @@ fun CoracaoCanvas(
             } else {
                 var listaColocada: List<FraseColocada> = emptyList()
 
-                val medirLargura: (String, Float) -> Float = { texto, tamanhoPx ->
+                val medirLarguraComum: (String, Float) -> Float = { texto, tamanhoPx ->
                     val fontSizeSp = (tamanhoPx / density.density).sp
                     val layout = textMeasurer.measure(
                         text = texto,
@@ -204,12 +204,40 @@ fun CoracaoCanvas(
                     layout.size.width.toFloat()
                 }
 
+                val medirLarguraCentral: (String, Float) -> Float = { texto, tamanhoPx ->
+                    val fontSizeSp = (tamanhoPx / density.density).sp
+                    val layout = textMeasurer.measure(
+                        text = texto,
+                        style = TextStyle(
+                            fontFamily = FonteCentralFamily,
+                            fontWeight = FontWeight.Normal,
+                            fontSize = fontSizeSp,
+                        ),
+                    )
+                    layout.size.width.toFloat()
+                }
+
+                val medirAlturaCentral: (String, Float) -> Float = { texto, tamanhoPx ->
+                    val fontSizeSp = (tamanhoPx / density.density).sp
+                    val layout = textMeasurer.measure(
+                        text = texto,
+                        style = TextStyle(
+                            fontFamily = FonteCentralFamily,
+                            fontWeight = FontWeight.Normal,
+                            fontSize = fontSizeSp,
+                        ),
+                    )
+                    layout.size.height.toFloat()
+                }
+
                 val tempoMs = measureTimeMillis {
                     listaColocada = calcularLayoutDeFrases(
                         larguraTela = larguraPx,
                         alturaTela = alturaPx,
                         listaFrases = LISTA_FRASES,
-                        medirLargura = medirLargura,
+                        medirLarguraComum = medirLarguraComum,
+                        medirLarguraCentral = medirLarguraCentral,
+                        medirAlturaCentral = medirAlturaCentral,
                         semente = semente,
                         densidade = density.density,
                     )
@@ -234,13 +262,24 @@ fun CoracaoCanvas(
                         indice = index,
                         semente = semente,
                     )
-                    val textLayoutResult = textMeasurer.measure(
-                        text = fraseColocada.texto,
-                        style = TextStyle(
+
+                    val textStyle = if (fraseColocada.ehCentral) {
+                        TextStyle(
+                            fontFamily = FonteCentralFamily,
+                            fontWeight = FontWeight.Normal,
+                            fontSize = fontSizeSp,
+                        )
+                    } else {
+                        TextStyle(
                             fontFamily = FontFamily.Default,
                             fontWeight = FontWeight.Bold,
                             fontSize = fontSizeSp,
-                        ),
+                        )
+                    }
+
+                    val textLayoutResult = textMeasurer.measure(
+                        text = fraseColocada.texto,
+                        style = textStyle,
                     )
 
                     val instanteInicio: Float
@@ -305,7 +344,7 @@ fun CoracaoCanvas(
                 val faseHalo = (tPosAnimMs % 2500L).toFloat() / 2500f
                 val ondaHalo = (sin(faseHalo * 2f * PI.toFloat()) + 1f) / 2f
                 opacidadeHalo = 0.05f + (0.15f * ondaHalo)
-                margemHaloPx = 12f * density.density
+                margemHaloPx = 16f * density.density
             } else {
                 opacidadeHalo = 0f
                 margemHaloPx = 0f
@@ -352,7 +391,7 @@ fun CoracaoCanvas(
                             color = Color(0xFFFF4D6D).copy(alpha = opacidadeHalo),
                             topLeft = Offset(xHalo, yHalo),
                             size = Size(wHalo, hHalo),
-                            cornerRadius = CornerRadius(16f * density.density),
+                            cornerRadius = CornerRadius(20f * density.density),
                         )
                     }
 
